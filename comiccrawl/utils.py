@@ -34,11 +34,12 @@ def save_image_from_url(img_link, image_index, new_folder, text2pic=False):
     """
     # get filename from url
     url_filename = img_link.rsplit('/', 1)[1]
-    url_filename = slugify(url_filename)
+    filename, extension = os.path.splitext(url_filename)
+    filename = slugify(filename)
     if text2pic:
-        img_path = str(image_index).zfill(3) + 'Z' + url_filename
+        img_path = str(image_index).zfill(3) + 'Z' + filename + extension
     else:
-        img_path = str(image_index).zfill(3) + '_' + url_filename
+        img_path = str(image_index).zfill(3) + '_' + filename + extension
     img_path = os.path.join(new_folder, img_path)
     # download the image
     r = requests.get(img_link, stream=True)
