@@ -1,58 +1,35 @@
-#   Downloads a whole chapter from the webcomic
-#   Parameters
-#       Starting point
-#       End url
-#       Text to search "next page" link
-
-# requests to make HTTP requests
 import json
-
 import requests
 from PIL import Image
-from requests import RequestException
-# beautiful soup for HTML parsing
 from bs4 import BeautifulSoup
+from requests import RequestException
 
-import os
-
-# page.findNext('div',{'class':'class_value'}).findNext('div',{'id':'id_value'}).findAll('a')
-#   div[class=class_value]/div[id=id_value]/a
-
-
-def save_image_from_url(img_link, image_index, new_folder):
-    print("\nImagen: " + img_link)
-    # get filename from url
-    url_filename = img_link.rsplit('/', 1)[1]
-    img_path = str(image_index).zfill(3) + '_' + url_filename
-    img_path = os.path.join(new_folder, img_path)
-    print("\nImagen (path): " + img_path)
-
-    # download the image
-    r = requests.get(img_link, stream=True)
-    if r.status_code == 200:
-        with open(img_path, 'wb') as img_file:
-            for chunk in r.iter_content(1024):
-                img_file.write(chunk)
-                #                    for chunk in r:
-                #                        img_file.write(chunk)
-    return img_path
-
-
-def make_new_folder(base_folder, chapter_num):
-    # make a new folder for this chapter in the base folder
-    chapter_title = 'chapter_' + str(chapter_num).zfill(3)
-    # zfill to pad chapter number with zeroes
-    new_folder = os.path.join(base_folder, chapter_title)
-    print("Making folder: " + new_folder)
-    try:
-        os.mkdir(new_folder)
-    except FileExistsError:
-        # do nothing
-        pass
-    return new_folder
+from comiccrawl.compress import compress_folder
+from comiccrawl.utils import make_new_folder, save_image_from_url, delete_folder
 
 
 def crawl_chapter(start_url, end_url, next_text, base_folder, chapter_num):
+    """
+    Iterates over all the images of a chapter in the webcomic and download
+    each of it pages.
+
+    This function will create a new folder using the chapter_num parameter and
+    all the images will be downloaded there.
+
+    If there is some text in a page it will call the text2pic service
+    TODO: take the text2pic host from config file. now is on localhost:5000
+
+    After downloading the whole chapter into a folder it will make a CBZ
+    file from it,
+
+    :param start_url:   first page of this chapter
+    :param end_url:     last page
+    :param next_text:   the text of the "next page" link to iterate the chapter
+    :param base_folder: the folder where the webcomic is being downloaded
+    :param chapter_num: the number of this chapter
+    :return:
+
+    """
     current_page = start_url
     page_index = 1
     new_folder = make_new_folder(base_folder, chapter_num)
@@ -74,17 +51,22 @@ def crawl_chapter(start_url, end_url, next_text, base_folder, chapter_num):
             # some pages have text
             # <div class="entry">
             image_text = soup.find('div', {'class': 'entry'}).get_text()
-            
+
             img_path = save_image_from_url(img_link, image_index, new_folder)
 
             image_text = image_text.strip()
             if image_text != '':
-                print("\nTexto: " + image_text)
+                #   I want the text printed in the same image size as the last downloaded image
+                #   so I extract the size from it.
                 im = Image.open(img_path)
                 image_size = im.size  # (width,height) tuple
                 # get the image from the flask utility
-                get_image_from_text2pic(image_text, image_size, image_index, new_folder, img_link)
-
+                try:
+                    get_image_from_text2pic(image_text, image_size, image_index, new_folder)
+                except RequestException as ex:
+                    print("Exception connecting to text2pic")
+                    print(ex)
+            # next loop step
             current_page = next_link
             page_index += 1
             image_index += 1
@@ -93,33 +75,52 @@ def crawl_chapter(start_url, end_url, next_text, base_folder, chapter_num):
             print(ex)
             break
         except Exception as inst:
-            print(type(inst))   # the exception instance
-            print(inst.args)    # arguments stored in .args
-            print(inst)         # __str__ allows args to be printed directly,
-                                # but may be overridden in exception subclasses#
+            print(type(inst))  # the exception instance
+            print(inst.args)  # arguments stored in .args
+            print(inst)  # __str__ allows args to be printed directly,
+            # but may be overridden in exception subclasses#
+    # end of chapter loop
+    # create zip
+    compress_folder(new_folder)
+    delete_folder(new_folder)
 
-def get_image_from_text2pic(text, size, image_index, new_folder, img_link):
-    # compose json
-    w_margin = size[0]*0.15
-    h_margin = size[1]*0.15
+
+def get_image_from_text2pic(text, size, image_index, new_folder):
+    """
+
+    Sends some text to the text2pic service that embeds the text in a series
+    of images of the given size
+
+    The images are named using the image_index so they will appear after
+    the original image
+
+    :param text:    the text to put into images
+    :param size:    the image size
+    :param image_index: current image index
+    :param new_folder:  destination folder to store images
+    :return:
+    """
+    text2pic_host = 'http://localhost:5000'
+    # compose input json for text2pic
+    w_margin = size[0] * 0.15
+    h_margin = size[1] * 0.15
     data = {'text': text, 'width': size[0], 'height': size[1],
-            'margin-width':w_margin, 'margin-height': h_margin,
-            'font': 'arial.ttf', 'font-size': 32 }
+            'margin-width': w_margin, 'margin-height': h_margin,
+            'font': 'arial.ttf', 'font-size': 32}
     json_data = json.dumps(data)
     headers = {'Content-type': 'application/json'}
-    img_request = requests.post( 'http://localhost:5000/text2pic', headers=headers, data=json_data, stream = True)
+    img_request = requests.post(text2pic_host + '/text2pic', headers=headers, data=json_data, stream=True)
     if img_request.status_code == 200:
-        url_filename = img_link.rsplit('/', 1)[1]
-        img_path = str(image_index).zfill(3) + 'Z' + url_filename
-        img_path = os.path.join(new_folder, img_path)
-        with open(img_path, 'wb') as img_file:
-            for chunk in img_request.iter_content(1024):
-                img_file.write(chunk)
-    elif img_request.status_code == 400:
+        # get json body and iterate
+        # the json response is an array of image relative urls
+        json_resp = img_request.json()
+        for item in json_resp['images']:
+            current_img_url = text2pic_host + item['filename']
+            save_image_from_url(current_img_url, image_index, new_folder, True)
+    else:
         # bad request
-        print('Error in text from ' + img_link + ' (image ' + image_index + ' in chapter ' + new_folder +')')
-        print( img_request.text)
-
+        print('Error in text from ' + image_index + ' image in chapter ' + new_folder + ')')
+        print(img_request.text)
 
 
 def get_end_of_chapter(start_url, next_chapter):

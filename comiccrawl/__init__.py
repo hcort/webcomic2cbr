@@ -7,7 +7,9 @@ from comiccrawl.chapterthread import get_end_of_chapter, crawl_chapter
 def main():
 
     # starting point
-    start_url = "https://killsixbilliondemons.com/comic/kill-six-billion-demons-chapter-1/"
+    # start_url = "https://killsixbilliondemons.com/comic/kill-six-billion-demons-chapter-1/"
+    # chapter 17
+    start_url = 'https://killsixbilliondemons.com/comic/seekerofthrones4-23/'
     next_page = "Next Page &gt;"
     next_chapter = "Next Chapter ]&gt;"
 
@@ -22,12 +24,13 @@ def main():
     next_chapter = unescape(next_chapter)
 
     # base folder
-    base_folder = 'C:\\Users\\Héctor\\Documents\\Kill Six Billion Demons\\'
+    base_folder = 'C:\\Users\\Héctor\\Documents\\Kill_Six_Billion_Demons\\'
 
     # get end url for chapter
     current_url = start_url
     next_url = current_url
-    count = 1
+    # count = 1
+    count = 17 # chapter 17
     while '' != next_url:
         next_url = get_end_of_chapter(current_url, next_chapter)
         # iterate all the chapters
