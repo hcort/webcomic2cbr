@@ -7,11 +7,10 @@ from comiccrawl.chapterthread import get_end_of_chapter, crawl_chapter
 def main():
 
     # starting point
-    # start_url = "https://killsixbilliondemons.com/comic/kill-six-billion-demons-chapter-1/"
-    # chapter 17
-    start_url = 'https://killsixbilliondemons.com/comic/seekerofthrones4-23/'
+    start_url = "https://killsixbilliondemons.com/comic/kill-six-billion-demons-chapter-1/"
     next_page = "Next Page &gt;"
     next_chapter = "Next Chapter ]&gt;"
+    count = 1
 
     """
     Problem with HTML entities
@@ -29,8 +28,6 @@ def main():
     # get end url for chapter
     current_url = start_url
     next_url = current_url
-    # count = 1
-    count = 17 # chapter 17
     while '' != next_url:
         next_url = get_end_of_chapter(current_url, next_chapter)
         # iterate all the chapters
@@ -42,14 +39,15 @@ def main():
         count += 1
         current_url = next_url
 
-    # get main thread
-    mt = threading.currentThread()
-    # join all threads save main
-    for th in threading.enumerate():
-        # si es el hilo principal saltar o entraremos en deadlock
-        if th is mt:
-            continue
-        th.join()
+    # won´t use threads, delete this
+    # # get main thread
+    # mt = threading.currentThread()
+    # # join all threads save main
+    # for th in threading.enumerate():
+    #     # si es el hilo principal saltar o entraremos en deadlock
+    #     if th is mt:
+    #         continue
+    #     th.join()
 
 
 if "__main__" == __name__: main()

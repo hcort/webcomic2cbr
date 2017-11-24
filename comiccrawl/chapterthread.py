@@ -43,15 +43,21 @@ def crawl_chapter(start_url, end_url, next_text, base_folder, chapter_num):
                 break
 
             soup = BeautifulSoup(page.text, "html.parser")
+            print('curr: ' + current_page)
             # get the url for the "Next page" link
-            next_link = soup.find('a', href=True, text=next_text)['href']
+            next_link = soup.find('a', href=True, text=next_text)
+            if next_link:
+                next_link = next_link['href']
+            else:
+                next_link = ''
+            print('next link: ' + next_link)
             # get the current image
             img_link = soup.find('div', {'class': 'comic-table'}).findNext('div', {'id': 'comic'}).find('img')['src']
-
+            print('img link: ' + img_link)
             # some pages have text
             # <div class="entry">
             image_text = soup.find('div', {'class': 'entry'}).get_text()
-
+            print('image_text: ' + image_text)
             img_path = save_image_from_url(img_link, image_index, new_folder)
 
             image_text = image_text.strip()
@@ -130,5 +136,9 @@ def get_end_of_chapter(start_url, next_chapter):
 
     soup = BeautifulSoup(page.text, "html.parser")
     # get the url for the "Next page" link
-    next_link = soup.find('a', href=True, string=next_chapter)['href']
+    next_link = soup.find('a', href=True, string=next_chapter)
+    if next_link:
+        next_link = next_link['href']
+    else:
+        next_link = ''
     return next_link
