@@ -1,4 +1,7 @@
 import json
+import os
+import zipfile
+
 import requests
 from PIL import Image
 from bs4 import BeautifulSoup
@@ -106,26 +109,29 @@ def get_image_from_text2pic(text, size, image_index, new_folder):
     :param new_folder:  destination folder to store images
     :return:
     """
-    text2pic_host = 'http://localhost:5000'
-    # compose input json for text2pic
-    w_margin = size[0] * 0.15
-    h_margin = size[1] * 0.15
-    data = {'text': text, 'width': size[0], 'height': size[1],
-            'margin-width': w_margin, 'margin-height': h_margin,
-            'font': 'arial.ttf', 'font-size': 32}
-    json_data = json.dumps(data)
+    text2pic_host = 'http://172.17.0.2:5000/'
+    text2pic_host = 'http://127.0.0.1:5000/'
+    margin_ratio = 0.15
+    json_data = json.dumps({'text': text, 'width': size[0], 'height': size[1],
+            'margin-width': size[0] * margin_ratio, 'margin-height': size[1] * margin_ratio,
+            'font': 'NotoMono-Regular.ttf', 'font-size': 32})
     headers = {'Content-type': 'application/json'}
-    img_request = requests.post(text2pic_host + '/text2pic', headers=headers, data=json_data, stream=True)
+    img_request = requests.post(text2pic_host + 'text2piczip', headers=headers, data=json_data, stream=True)
     if img_request.status_code == 200:
-        # get json body and iterate
-        # the json response is an array of image relative urls
-        json_resp = img_request.json()
-        for item in json_resp['images']:
-            current_img_url = text2pic_host + item['filename']
-            save_image_from_url(current_img_url, image_index, new_folder, True)
+        zip_folder = os.path.join(new_folder, 'temp-zip')
+        zip_file = os.path.join(new_folder, 'temp-zip')
+        os.mkdir(zip_folder)
+        with open(zip_file, 'wb') as f:
+            f.write(img_request.content)
+            with zipfile.ZipFile(f, 'r') as zip_ref:
+                zip_ref.extractall(zip_folder)
+        os.remove(zip_file)
+        all_images = os.listdir(zip_folder)
+        for image in all_images:
+            os.rename(os.path.join(zip_folder, image), os.path.join(new_folder, f'{image_index:03d}Z{image}'))
+        os.rmdir(zip_folder)
     else:
-        # bad request
-        print('Error in text from ' + image_index + ' image in chapter ' + new_folder + ')')
+        print(f'Error in text from {image_index} image in chapter {new_folder}')
         print(img_request.text)
 
 

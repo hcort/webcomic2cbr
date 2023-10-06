@@ -23,8 +23,8 @@ def main():
     next_chapter = unescape(next_chapter)
 
     # base folder
-    base_folder = 'C:\\Users\\Héctor\\Documents\\Kill_Six_Billion_Demons\\'
-
+    # base_folder = 'C:\\Users\\Héctor\\Documents\\Kill_Six_Billion_Demons\\'
+    base_folder = '/home/hector/killsixbilliondemons/'
     # get end url for chapter
     current_url = start_url
     next_url = current_url
