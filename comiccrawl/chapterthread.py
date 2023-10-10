@@ -32,7 +32,7 @@ class ChapterIterator:
         if page.status_code == requests.codes.ok:
             soup = BeautifulSoup(page.text, "html.parser")
             next_chapter = soup.select_one('.navi-next-chap')
-            if next_chapter:
+            if next_chapter and next_chapter.get('href', None):
                 print(f'Current chapter: {self.__current_url} - Next chapter: {next_chapter["href"]}')
                 self.__current_url = next_chapter['href']
                 return self.__current_url
