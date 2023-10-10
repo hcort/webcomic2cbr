@@ -43,13 +43,13 @@ def save_image_from_url(img_link, image_index, new_folder):
                 img_file.write(chunk)
     else:
         print(f'Error downloading file: {image_index} from {img_link}')
-    return img_path
 
 
 def make_new_folder(base_folder, chapter_num):
     chapter_title = 'chapter_' + str(chapter_num).zfill(3)
     new_folder = os.path.join(base_folder, chapter_title)
-    os.mkdir(new_folder)
+    # os.mkdir(new_folder)
+    os.makedirs(new_folder, exist_ok=True)
     return new_folder
 
 

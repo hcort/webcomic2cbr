@@ -11,87 +11,103 @@ from comiccrawl.compress import compress_folder
 from comiccrawl.utils import make_new_folder, save_image_from_url, delete_folder
 
 
-def crawl_chapter(start_url, end_url, next_text, base_folder, chapter_num):
+class ChapterIterator:
     """
-    Iterates over all the images of a chapter in the webcomic and download
-    each of it pages.
-
-    This function will create a new folder using the chapter_num parameter and
-    all the images will be downloaded there.
-
-    If there is some text in a page it will call the text2pic service
-    TODO: take the text2pic host from config file. now is on localhost:5000
-
-    After downloading the whole chapter into a folder it will make a CBZ
-    file from it,
-
-    :param start_url:   first page of this chapter
-    :param end_url:     last page
-    :param next_text:   the text of the "next page" link to iterate the chapter
-    :param base_folder: the folder where the webcomic is being downloaded
-    :param chapter_num: the number of this chapter
-    :return:
-
+        Iterates through the chapters
+        We start in chapter one, until we arrive to the latest
     """
-    current_page = start_url
-    page_index = 1
-    new_folder = make_new_folder(base_folder, chapter_num)
 
-    image_index = 0
-    while current_page != end_url:
-        # get current page
-        try:
-            page = requests.get(current_page)
-            if page.status_code != requests.codes.ok:
-                break
+    def __init__(self, start_url):
+        self.__start = start_url
+        self.__current_url = ''
 
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if not self.__current_url:
+            self.__current_url = self.__start
+            return self.__current_url
+        page = requests.get(self.__current_url)
+        if page.status_code == requests.codes.ok:
             soup = BeautifulSoup(page.text, "html.parser")
-            print('curr: ' + current_page)
-            # get the url for the "Next page" link
-            next_link = soup.find('a', href=True, text=next_text)
-            if next_link:
-                next_link = next_link['href']
-            else:
-                next_link = ''
-            print('next link: ' + next_link)
-            # get the current image
-            img_link = soup.find('div', {'class': 'comic-table'}).findNext('div', {'id': 'comic'}).find('img')['src']
-            print('img link: ' + img_link)
-            # some pages have text
-            # <div class="entry">
-            image_text = soup.find('div', {'class': 'entry'}).get_text()
-            print('image_text: ' + image_text)
-            img_path = save_image_from_url(img_link, image_index, new_folder)
+            next_chapter = soup.select_one('.navi-next-chap')
+            if next_chapter:
+                print(f'Current chapter: {self.__current_url} - Next chapter: {next_chapter["href"]}')
+                self.__current_url = next_chapter['href']
+                return self.__current_url
+        print('No more chapters')
+        raise StopIteration
 
-            image_text = image_text.strip()
-            if image_text != '':
-                #   I want the text printed in the same image size as the last downloaded image
-                #   so I extract the size from it.
-                im = Image.open(img_path)
-                image_size = im.size  # (width,height) tuple
-                # get the image from the flask utility
-                try:
-                    get_image_from_text2pic(image_text, image_size, image_index, new_folder)
-                except RequestException as ex:
-                    print("Exception connecting to text2pic")
-                    print(ex)
-            # next loop step
-            current_page = next_link
-            page_index += 1
-            image_index += 1
-        except RequestException as ex:  # this covers everything
-            print("Couldn´t get page" + current_page)
-            print(ex)
-            break
-        except Exception as inst:
-            print(type(inst))  # the exception instance
-            print(inst.args)  # arguments stored in .args
-            print(inst)  # __str__ allows args to be printed directly,
-            # but may be overridden in exception subclasses#
-    # end of chapter loop
-    # create zip
-    compress_folder(new_folder)
-    delete_folder(new_folder)
+
+class PagesIterator:
+    """
+        Iterates through the pages of a chapter
+        We start in chapter one, until we arrive to the latest
+
+        This iterator returns the soup
+    """
+
+    def __init__(self, start_url):
+        self.__start = start_url
+        self.__current_url = start_url
+        self.__end_url = ''
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.__current_url != self.__end_url:
+            page = requests.get(self.__current_url)
+            if page.status_code == requests.codes.ok:
+                soup = BeautifulSoup(page.text, "html.parser")
+                if not self.__end_url:
+                    next_chapter = soup.select_one('.navi-next-chap')
+                    self.__end_url = next_chapter.get('href', None) if next_chapter else None
+                next_page = soup.select_one('.navi-next')
+                if next_page and next_page.get('href', None):
+                    print(f'\tCurrent page: {self.__current_url} - Next page: {next_page["href"]}')
+                    self.__current_url = next_page['href']
+                    return soup
+        print('\tNo more pages')
+        raise StopIteration
+
+
+def iterate_webcomic(start_url, destination_folder):
+    for chapter_num, chapter in enumerate(ChapterIterator(start_url)):
+        new_folder = make_new_folder(destination_folder, chapter_num)
+        for idx, page in enumerate(PagesIterator(chapter)):
+            save_image(page, idx, new_folder)
+            save_text_as_images(page, idx, new_folder)
+        compress_folder(new_folder)
+        delete_folder(new_folder)
+
+
+def save_image(soup, image_index, new_folder):
+    img_link = soup.find('div', {'class': 'comic-table'}).findNext('div', {'id': 'comic'}).find('img')['src']
+    save_image_from_url(img_link, image_index, new_folder)
+
+
+def save_text_as_images(soup, image_index, new_folder):
+    image_text = soup.find('div', {'class': 'entry'}).get_text()
+
+    image_text = image_text.strip()
+    if image_text != '':
+        #   I want the text printed in the same image size as the last downloaded image
+        #   so I extract the size from it.
+        image_with_index = ''
+        for image_name in sorted(os.listdir(new_folder), reverse=True):
+            if image_name.startswith(f'{image_index:03d}_'):
+                image_with_index = image_name
+
+        img_path = os.path.join(new_folder, image_with_index)
+        im = Image.open(img_path)
+        image_size = im.size  # (width,height) tuple
+        # get the image from the flask utility
+        try:
+            get_image_from_text2pic(image_text, image_size, image_index, new_folder)
+        except RequestException as ex:
+            print(f"Exception connecting to text2pic - {ex}")
 
 
 def get_image_from_text2pic(text, size, image_index, new_folder):
@@ -109,22 +125,22 @@ def get_image_from_text2pic(text, size, image_index, new_folder):
     :param new_folder:  destination folder to store images
     :return:
     """
-    text2pic_host = 'http://172.17.0.2:5000/'
+    # text2pic_host = 'http://172.17.0.2:5000/'
     text2pic_host = 'http://127.0.0.1:5000/'
     margin_ratio = 0.15
     json_data = json.dumps({'text': text, 'width': size[0], 'height': size[1],
-            'margin-width': size[0] * margin_ratio, 'margin-height': size[1] * margin_ratio,
-            'font': 'NotoMono-Regular.ttf', 'font-size': 32})
+                            'margin-width': size[0] * margin_ratio, 'margin-height': size[1] * margin_ratio,
+                            'font': 'NotoMono-Regular.ttf', 'font-size': 32})
     headers = {'Content-type': 'application/json'}
     img_request = requests.post(text2pic_host + 'text2piczip', headers=headers, data=json_data, stream=True)
     if img_request.status_code == 200:
         zip_folder = os.path.join(new_folder, 'temp-zip')
-        zip_file = os.path.join(new_folder, 'temp-zip')
-        os.mkdir(zip_folder)
+        zip_file = os.path.join(new_folder, 'temp.zip')
+        os.makedirs(zip_folder, exist_ok=True)
         with open(zip_file, 'wb') as f:
             f.write(img_request.content)
-            with zipfile.ZipFile(f, 'r') as zip_ref:
-                zip_ref.extractall(zip_folder)
+        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+            zip_ref.extractall(zip_folder)
         os.remove(zip_file)
         all_images = os.listdir(zip_folder)
         for image in all_images:
